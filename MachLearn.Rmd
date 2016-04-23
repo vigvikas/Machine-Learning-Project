@@ -1,0 +1,144 @@
+---
+title: "Practical Machine Learning Project"
+author: "Vikas Vig"
+date: "Saturday, April 23, 2016"
+output: html_document
+---
+
+# Background  
+Using devices such as Jawbone, Up, Nike FuelBand etc. it is now possible to collect large amount of data about personal activity easily and in expensively. One thing that people regularly do is to quantify how much of a particular activity they do, but they rarely quantify how well they do it.  
+  
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har.  
+Data was collected from accelerometers on the belt, forearm, arm and dumbbell of 6 participants.  
+  
+# Goal of Project  
+  
+The Goal of the the Project is to make a prediction model which predicts the manner in which the participants did the exercise. This is the "classe" variable in the training set with five classes A, B, C, D & E.  
+  
+# Steps Undertaken to make the Prediction Model  
+1. Load the data set and do some preliminary data exploration.
+2. Use 70% of the original data for model building (training) and the balance 30% for vaidation (testing)
+3. Clean the data by 1) removing variables which cannot be explanatoty variables; 2) removing variables where there is little information
+4. Use Cross Validation with 7 folds
+5. Apply two methods : Decision Tree & Random Forest to build two different Models
+6. Check the Accuracy of the two models (built in step 5) above on the testing data
+7. Use the Model with higher Accuracy to estimate classes of 20 observations.
+
+### Load Libraries
+
+```{r warning =FALSE, message=FALSE}
+library(caret)
+library(ggplot2)
+library(dplyr)
+library(rattle)
+```
+
+### Download Data
+
+```{r tidy=TRUE}
+urlTrain <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+urlTest <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+
+if(file.exists("pml-training.csv")){
+    dataTrain <- read.csv("pml-training.csv", na.strings = c("NA", "#DIV/0!", ""))
+} else{
+  download.file(urlTrain, "pml-training.csv")
+  dataTrain <- read.csv("pml-training.csv", na.strings = c("NA", "#DIV/0!", ""))
+}
+
+if(file.exists("pml-testing.csv")){
+  dataTest <- read.csv("pml-testing.csv", na.strings = c("NA", "#DIV/0!", ""))
+} else{
+  download.file(urlTest, "pml-testing.csv")
+  dataTest <- read.csv("pml-testing.csv", na.strings = c("NA", "#DIV/0!", ""))
+}
+  
+```
+
+### Setting Seed for Reproduceability
+```{r}
+set.seed(123)
+```
+
+### Partitioning into training & testing sets  
+70% of data is used for training & balance 30% for testing  
+```{r}
+intrain <- createDataPartition(y= dataTrain$classe, p=.70, list=FALSE)
+training <- dataTrain[intrain, ]
+testing <- dataTrain[-intrain, ]
+```
+### Cleaning Training Set  
+1. Variables that cannot be explanatory variables are removed;
+2. Variables with low Variance are removed;
+3. Variables with 50% or more "NA" are removed;
+
+```{r tidy = TRUE}
+training <- training [,-(1:7)]
+smallVar <- nearZeroVar(training, saveMetrics = TRUE)
+training <- training[, !smallVar$nzv]
+manyNA <- sapply(colnames(training), function(x) if(sum(is.na(training[, x])) > 0.50*nrow(training)) {return(TRUE)}
+                 else{return(FALSE)})
+training <- training[, !manyNA]
+```
+
+### Cleaning Testing Set
+Test set is cleaned with sme process as used for Training Set.
+```{r tidy =TRUE}
+testing <- testing [,-(1:7)]
+smallVar <- nearZeroVar(testing, saveMetrics = TRUE)
+testing <- testing[, !smallVar$nzv]
+manyNA <- sapply(colnames(testing), function(x) if(sum(is.na(testing[, x])) > 0.50*nrow(testing)) {return(TRUE)}
+                 else{return(FALSE)})
+testing <- testing[, !manyNA]
+```
+
+### Preprocessing Data
+Control variable is assigned with Cross Validation as preprocessing options
+```{r tidy = TRUE}
+myControl <- trainControl(method = "cv", number = 7, verboseIter = FALSE, allowParallel= TRUE)
+```
+
+### Building Model 1: Decision Tree Model
+```{r tidy = TRUE, message=FALSE}
+dtModel <- train(classe ~., data = training, method = "rpart", trControl = myControl)
+print(dtModel)
+fancyRpartPlot(dtModel$finalModel, main = "Decision Tree", sub = "")
+```
+
+### Building Model 2: Random Forest Model
+```{r tidy=TRUE, message=FALSE, warning=FALSE}
+rfModel <- train(classe ~., data = training, method = "rf", trControl = myControl)
+print(rfModel)
+```
+
+### Validation Model 1: Decision Tree on Test data
+```{r tidy=TRUE}
+predictTestDT <- predict(dtModel, testing)
+confusionMatrix(predictTestDT, testing$classe)
+```
+
+### Validating Model 2: Random Forest on Test data
+```{r tidy=TRUE}
+predictTestRF <- predict(rfModel, testing)
+confusionMatrix(predictTestRF, testing$classe)
+```
+
+### Since Accuracy of Random Forest Model is much higher than Decision Tree Model, Random Forest Model is used to predict outcome of 20 obervations
+
+```{r tidy=TRUE}
+dataTest <- dataTest [,-(1:7)]
+smallVar <- nearZeroVar(dataTest, saveMetrics = TRUE)
+dataTest <- dataTest[, !smallVar$nzv]
+manyNA <- sapply(colnames(dataTest), function(x) if(sum(is.na(dataTest[, x])) > 0.50*nrow(dataTest)) {return(TRUE)}
+                 else{return(FALSE)})
+dataTest <- dataTest[, !manyNA]
+
+rfPredclasse <- predict(rfModel, dataTest)
+rfPredclasse
+```
+
+# Conclusion  
+The Random Forest model provides high level of Accuracy. The model statistics indicate that the built Random Forest Model had overall accuracy of 99%. The Sensitivity was between 97.8% to 100% and Specificity was 99% for all Classes The predictions using this model for the 20 observations were CORRECT for all 20 cases. 
+
+
